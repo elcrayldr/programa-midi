@@ -1,4 +1,4 @@
-# CRAY LDR MIDI DECK v0.1
+# CRAY LDR MIDI DECK v0.3
 # Windows 10/11 - Alesis V Mini - MIDI monitor + per-application pad actions
 import os, sys, json, time, threading, subprocess, queue, ctypes
 from pathlib import Path
@@ -153,6 +153,7 @@ class MidiDeckApp:
         self.knob_learn_vars = {}
         self.action_type = tk.StringVar(value="none")
         self.action_value = tk.StringVar(value="")
+        self.pad_label = tk.StringVar(value="PAD 1")
         self.auto_var = tk.BooleanVar(value=self.cfg.get("auto_profile", True))
         self.startup_var = tk.BooleanVar(value=self.cfg.get("start_with_windows", False))
         self._style()
@@ -253,13 +254,16 @@ class MidiDeckApp:
         self.pad_combo = ttk.Combobox(form, textvariable=self.selected_pad, values=["36","38","42","46"], state="readonly", width=24)
         self.pad_combo.grid(row=1,column=1,sticky="ew",pady=4)
         self.pad_combo.bind("<<ComboboxSelected>>", lambda e: self.load_editor())
-        tk.Label(form, text="Acción", bg="#1b1d21", fg="#c4c6ca").grid(row=2,column=0,sticky="w",pady=4)
+        tk.Label(form, text="Nombre del botón", bg="#1b1d21", fg="#c4c6ca").grid(row=2,column=0,sticky="w",pady=4)
+        self.label_entry = ttk.Entry(form, textvariable=self.pad_label, width=36)
+        self.label_entry.grid(row=2,column=1,sticky="ew",pady=4)
+        tk.Label(form, text="Acción", bg="#1b1d21", fg="#c4c6ca").grid(row=3,column=0,sticky="w",pady=4)
         types = ["none","shortcut","open","url","text","macro"]
         self.type_combo = ttk.Combobox(form, textvariable=self.action_type, values=types, state="readonly", width=24)
-        self.type_combo.grid(row=2,column=1,sticky="ew",pady=4)
-        tk.Label(form, text="Valor / contenido", bg="#1b1d21", fg="#c4c6ca").grid(row=3,column=0,sticky="w",pady=4)
+        self.type_combo.grid(row=3,column=1,sticky="ew",pady=4)
+        tk.Label(form, text="Valor / contenido", bg="#1b1d21", fg="#c4c6ca").grid(row=4,column=0,sticky="w",pady=4)
         self.value_entry = ttk.Entry(form, textvariable=self.action_value, width=36)
-        self.value_entry.grid(row=3,column=1,sticky="ew",pady=4)
+        self.value_entry.grid(row=4,column=1,sticky="ew",pady=4)
         form.columnconfigure(1, weight=1)
         helptext = "shortcut: ctrl+shift+r | open: ruta .exe o carpeta | url: https://... | text: texto a escribir | macro: una acción por línea (tipo:valor)"
         tk.Label(right, text=helptext, bg="#1b1d21", fg="#92969e", wraplength=430, justify="left").pack(anchor="w", padx=14, pady=4)
@@ -274,6 +278,7 @@ class MidiDeckApp:
                            relief="flat", font=("Consolas", 9), state="disabled")
         self.log.pack(fill="both", expand=True, padx=12, pady=(0,12))
         self.load_editor()
+        self.refresh_pad_buttons()
 
 
     def open_knob_editor(self):
@@ -563,8 +568,19 @@ class MidiDeckApp:
             if p != self.current_profile:
                 self.current_profile = p
                 self.profile_label.config(text=p)
+                self.refresh_pad_buttons()
                 self.logline(f"Perfil activo: {p} ({proc or 'sin proceso'})")
         self.root.after(500, self.update_profile)
+
+    def refresh_pad_buttons(self):
+        for i, note in enumerate(("36", "38", "42", "46")):
+            action = self.cfg.get("profiles", {}).get(self.current_profile, {}).get(note)
+            if not action:
+                action = self.cfg.get("profiles", {}).get("GLOBAL", {}).get(note)
+            if not action:
+                action = self.cfg.get("mapping", {}).get("pads", {}).get(note, {})
+            label = action.get("label") or ("PAD " + str(i + 1))
+            self.pad_buttons[note].config(text=label + "\nNOTE " + note)
 
     def select_pad(self, note):
         self.selected_pad.set(note)
@@ -577,18 +593,20 @@ class MidiDeckApp:
         if not action and profile == "GLOBAL":
             action = self.cfg.get("mapping", {}).get("pads", {}).get(note, {})
         action = action or {"type":"none","value":""}
+        default_label = "PAD " + str(["36","38","42","46"].index(note) + 1)
+        self.pad_label.set(action.get("label") or self.cfg.get("mapping", {}).get("pads", {}).get(note, {}).get("label", default_label))
         self.action_type.set(action.get("type","none"))
         self.action_value.set(action.get("value",""))
 
     def save_assignment(self):
         profile, note = self.profile_var.get(), self.selected_pad.get()
-        action = {"type": self.action_type.get(), "value": self.action_value.get()}
+        label = self.pad_label.get().strip() or ("PAD " + str(["36","38","42","46"].index(note)+1))
+        action = {"label": label, "type": self.action_type.get(), "value": self.action_value.get()}
         self.cfg.setdefault("profiles", {}).setdefault(profile,{})[note] = action
         if profile == "GLOBAL":
-            self.cfg.setdefault("mapping",{}).setdefault("pads",{})[note] = {
-                "label": "PAD " + str(["36","38","42","46"].index(note)+1), **action
-            }
+            self.cfg.setdefault("mapping",{}).setdefault("pads",{})[note] = dict(action)
         save_config(self.cfg)
+        self.refresh_pad_buttons()
         self.logline(f"Guardado: {profile} / PAD {note}")
         messagebox.showinfo(APP_NAME, "Asignación guardada.")
 
