@@ -16,6 +16,12 @@ DEFAULT_CONFIG = {
     "forward_knobs": True,
     "mixer_nav_enabled": True,
     "mixer_nav_step": 10,
+    "fx_nav_enabled": True,
+    "fx_nav_step": 10,
+    "fx_slot_count": 8,
+    "fx_slot_x": None,
+    "fx_slot_y": None,
+    "fx_slot_step_y": None,
     "profile_processes": {},
     "knobs": {"14": {"label": "KNOB 1", "channel": 1}, "15": {"label": "KNOB 2", "channel": 1}, "16": {"label": "KNOB 3", "channel": 1}, "17": {"label": "KNOB 4", "channel": 1}},
     "profiles": {
@@ -172,8 +178,11 @@ class MidiDeckApp:
         self.output_var = tk.StringVar(value=self.cfg.get("midi_output", ""))
         self.forward_var = tk.BooleanVar(value=self.cfg.get("forward_knobs", True))
         self.mixer_nav_var = tk.BooleanVar(value=self.cfg.get("mixer_nav_enabled", True))
+        self.fx_nav_var = tk.BooleanVar(value=self.cfg.get("fx_nav_enabled", True))
         self.last_knob_values = {}
         self.knob_nav_accumulator = 0
+        self.fx_nav_accumulator = 0
+        self.fx_current_slot = 0
         self.knob_values = {cc: tk.IntVar(value=0) for cc in ("14", "15", "16", "17")}
         self.knob_learn_target = None
         self.knob_learn_vars = {}
@@ -237,7 +246,9 @@ class MidiDeckApp:
         ttk.Button(outrow, text="Abrir salida", command=self.connect_output).pack(side="left", padx=3)
         ttk.Button(outrow, text="Cerrar", command=self.disconnect_output).pack(side="left", padx=3)
         ttk.Checkbutton(outrow, text="Enviar CC14–17", variable=self.forward_var, command=self.save_forward).pack(side="left", padx=8)
-        ttk.Checkbutton(outrow, text="K1 Mixer FL", variable=self.mixer_nav_var, command=self.save_mixer_nav).pack(side="left", padx=6)
+        ttk.Checkbutton(outrow, text="K1 Inserts", variable=self.mixer_nav_var, command=self.save_mixer_nav).pack(side="left", padx=6)
+        ttk.Checkbutton(outrow, text="K2 Plugins", variable=self.fx_nav_var, command=self.save_fx_nav).pack(side="left", padx=6)
+        ttk.Button(outrow, text="Calibrar K2", command=self.open_fx_calibration).pack(side="left", padx=4)
         ttk.Button(outrow, text="Configurar knobs", command=self.open_knob_editor).pack(side="left", padx=4)
         ttk.Button(outrow, text="Perfiles", command=self.open_profile_manager).pack(side="left", padx=4)
 
@@ -488,6 +499,101 @@ class MidiDeckApp:
         save_config(self.cfg)
         self.logline("Navegación K1 Mixer FL " + ("activada." if self.mixer_nav_var.get() else "desactivada."))
 
+    def save_fx_nav(self):
+        self.cfg["fx_nav_enabled"] = bool(self.fx_nav_var.get())
+        self.last_knob_values.pop("15", None)
+        self.fx_nav_accumulator = 0
+        save_config(self.cfg)
+        self.logline("Navegación K2 entre plugins " + ("activada." if self.fx_nav_var.get() else "desactivada."))
+
+    def open_fx_calibration(self):
+        win = tk.Toplevel(self.root)
+        win.title("Calibración K2 — slots de efectos")
+        win.configure(bg="#17191d")
+        win.resizable(False, False)
+        tk.Label(win, text="CALIBRAR NAVEGACIÓN ENTRE PLUGINS", bg="#17191d", fg="#f2c400",
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=14, pady=(14, 6))
+        tk.Label(win, text="Deja el Mixer de FL Studio visible en el segundo monitor. En cada captura, coloca el cursor en el centro del nombre del plugin indicado. No uses la zona del botón de bypass.",
+                 bg="#17191d", fg="#d0d2d6", wraplength=440, justify="left").pack(anchor="w", padx=14, pady=5)
+        count_var = tk.StringVar(value=str(self.cfg.get("fx_slot_count", 8)))
+        row = tk.Frame(win, bg="#17191d"); row.pack(fill="x", padx=14, pady=8)
+        tk.Label(row, text="Slots ocupados del Insert:", bg="#17191d", fg="#c4c6ca").pack(side="left")
+        tk.Spinbox(row, from_=1, to=10, width=5, textvariable=count_var, bg="#25282e", fg="white",
+                   buttonbackground="#34373d", insertbackground="white").pack(side="left", padx=8)
+        status = tk.Label(win, text="Pendiente de calibración.", bg="#17191d", fg="#f2c400")
+        status.pack(anchor="w", padx=14, pady=6)
+        def capture(which):
+            status.config(text=f"Preparado: coloca el cursor en el centro del NOMBRE del plugin {which}. Capturando en 3 segundos…")
+            win.lift()
+            def take():
+                try:
+                    import pyautogui
+                    x, y = pyautogui.position()
+                    if which == "PRIMERO":
+                        self.cfg["fx_slot_x"] = int(x)
+                        self.cfg["fx_slot_y"] = int(y)
+                        status.config(text=f"Primer slot guardado: X={x}, Y={y}. Ahora captura el segundo slot, justo debajo.")
+                    else:
+                        if self.cfg.get("fx_slot_x") is None or self.cfg.get("fx_slot_y") is None:
+                            status.config(text="Primero debes capturar el primer slot.")
+                            return
+                        dy = int(y) - int(self.cfg["fx_slot_y"])
+                        if abs(dy) < 8:
+                            status.config(text="Los dos puntos están demasiado cerca. Repite la captura del segundo slot.")
+                            return
+                        self.cfg["fx_slot_step_y"] = dy
+                        self.cfg["fx_slot_count"] = max(1, min(10, int(count_var.get())))
+                        save_config(self.cfg)
+                        self.fx_current_slot = 0
+                        self.fx_nav_accumulator = 0
+                        status.config(text=f"Calibración guardada. X={self.cfg['fx_slot_x']} · Y={self.cfg['fx_slot_y']} · separación={dy}px · {self.cfg['fx_slot_count']} slots.")
+                        self.logline("K2 calibrado: navegación por slots del Mixer.")
+                except Exception as e:
+                    status.config(text="Error de calibración: " + str(e))
+            self.root.after(3000, take)
+        buttons = tk.Frame(win, bg="#17191d"); buttons.pack(fill="x", padx=14, pady=12)
+        ttk.Button(buttons, text="Capturar primer plugin", command=lambda: capture("PRIMERO")).pack(side="left", padx=(0, 6))
+        ttk.Button(buttons, text="Capturar segundo plugin", command=lambda: capture("SEGUNDO")).pack(side="left")
+        ttk.Button(win, text="Cerrar", command=win.destroy).pack(pady=(0, 12))
+
+    def handle_fx_slot_navigation(self, knob_key, value):
+        previous = self.last_knob_values.get(knob_key)
+        self.last_knob_values[knob_key] = int(value)
+        if knob_key != "15" or not self.fx_nav_var.get() or previous is None:
+            return
+        if self.cfg.get("fx_slot_x") is None or self.cfg.get("fx_slot_y") is None or self.cfg.get("fx_slot_step_y") is None:
+            return
+        delta = int(value) - int(previous)
+        if abs(delta) > 24:
+            self.fx_nav_accumulator = 0
+            return
+        if delta == 0:
+            return
+        if detect_profile(foreground_process()) != "FL Studio":
+            self.fx_nav_accumulator = 0
+            return
+        direction = 1 if delta > 0 else -1
+        previous_direction = getattr(self, "_fx_nav_direction", 0)
+        if previous_direction and direction != previous_direction:
+            self.fx_nav_accumulator = 0
+        self._fx_nav_direction = direction
+        self.fx_nav_accumulator += delta
+        threshold = max(8, min(24, int(self.cfg.get("fx_nav_step", 10))))
+        if abs(self.fx_nav_accumulator) >= threshold:
+            count = max(1, min(10, int(self.cfg.get("fx_slot_count", 8))))
+            next_slot = max(0, min(count - 1, self.fx_current_slot + direction))
+            if next_slot != self.fx_current_slot:
+                try:
+                    import pyautogui
+                    x = int(self.cfg["fx_slot_x"])
+                    y = int(self.cfg["fx_slot_y"]) + int(self.cfg["fx_slot_step_y"]) * next_slot
+                    pyautogui.click(x, y)
+                    self.fx_current_slot = next_slot
+                    self.logline(f"K2: plugin seleccionado {next_slot + 1}/{count}.")
+                except Exception as e:
+                    self.logline("Error navegación K2 plugins: " + str(e))
+            self.fx_nav_accumulator -= direction * threshold
+
     def handle_mixer_navigation(self, knob_key, value):
         # Convierte el recorrido del potenciómetro CC14 en pasos discretos.
         # Umbral alto + histéresis para evitar que pequeñas variaciones recorran
@@ -595,9 +701,10 @@ class MidiDeckApp:
                         continue
                     self.knob_values[key].set(msg.value)
                     self.handle_mixer_navigation(key, msg.value)
+                    self.handle_fx_slot_navigation(key, msg.value)
                     self.knob_status.config(text="  |  ".join("K" + str(i + 1) + " " +
                         str(self.knob_values[k].get()) for i, k in enumerate(("14", "15", "16", "17"))))
-                    if self.forward_var.get() and self.midi_out and not (key == "14" and self.mixer_nav_var.get()):
+                    if self.forward_var.get() and self.midi_out and not (key == "14" and self.mixer_nav_var.get()) and not (key == "15" and self.fx_nav_var.get()):
                         try:
                             low, high = int(knob.get("min_value", 0)), int(knob.get("max_value", 127))
                             scaled = round(low + (msg.value / 127) * (high - low))
