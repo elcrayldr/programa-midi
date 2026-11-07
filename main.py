@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
     "mixer_nav_step": 10,
     "fx_nav_enabled": True,
     "fx_nav_step": 10,
-    "fx_slot_count": 8,
+    "fx_slot_count": 10,
     "fx_slot_x": None,
     "fx_slot_y": None,
     "fx_slot_step_y": None,
@@ -515,7 +515,7 @@ class MidiDeckApp:
                  font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=14, pady=(14, 6))
         tk.Label(win, text="Deja el Mixer de FL Studio visible en el segundo monitor. En cada captura, coloca el cursor en el centro del nombre del plugin indicado. No uses la zona del botón de bypass.",
                  bg="#17191d", fg="#d0d2d6", wraplength=440, justify="left").pack(anchor="w", padx=14, pady=5)
-        count_var = tk.StringVar(value=str(self.cfg.get("fx_slot_count", 8)))
+        count_var = tk.StringVar(value=str(self.cfg.get("fx_slot_count", 10)))
         row = tk.Frame(win, bg="#17191d"); row.pack(fill="x", padx=14, pady=8)
         tk.Label(row, text="Slots ocupados del Insert:", bg="#17191d", fg="#c4c6ca").pack(side="left")
         tk.Spinbox(row, from_=1, to=10, width=5, textvariable=count_var, bg="#25282e", fg="white",
