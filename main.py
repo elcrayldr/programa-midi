@@ -283,15 +283,22 @@ class MidiDeckApp:
         self.logline("Dispositivo desconectado.")
 
     def midi_callback(self, msg):
+        # Este callback corre en el hilo MIDI: solo transfiere el evento.
+        # Tkinter, el estado de pads y las acciones se procesan en el hilo UI.
+        try:
+            self.events.put(("midi", msg.copy()))
+        except Exception as e:
+            self.events.put(("log", "Error MIDI callback: " + str(e)))
+
+    def handle_midi_message(self, msg):
         try:
             typ = msg.type
             ch = getattr(msg, "channel", -1) + 1
             if typ in ("note_on", "note_off"):
                 note = msg.note
                 is_on = typ == "note_on" and msg.velocity > 0
-                label = f"{typ.upper()} ch{ch} note={note} vel={msg.velocity}"
-                self.logline(label)
-                if ch == 1 and note in (36,38,42,46):
+                self.logline(f"{typ.upper()} ch{ch} note={note} vel={msg.velocity}")
+                if ch == 1 and note in (36, 38, 42, 46):
                     if is_on and note not in self.last_pad_state:
                         self.last_pad_state.add(note)
                         profile = self.current_profile if self.current_profile != "Windows" else "GLOBAL"
@@ -314,11 +321,14 @@ class MidiDeckApp:
         if not action:
             action = self.cfg.get("mapping", {}).get("pads", {}).get(note, {})
         if action and action.get("type") != "none":
-            try:
-                run_action(action)
-                self.logline(f"MACRO ejecutada: {profile} / PAD note {note}")
-            except Exception as e:
-                self.logline("ERROR macro: " + str(e))
+            # Las acciones pueden tardar (macros, apertura de apps); no bloquear Tk.
+            def worker():
+                try:
+                    run_action(action)
+                    self.events.put(("log", f"Acción lanzada: {profile} / PAD note {note}"))
+                except Exception as e:
+                    self.events.put(("log", "ERROR acción: " + str(e)))
+            threading.Thread(target=worker, daemon=True).start()
 
     def update_profile(self):
         if self.auto_var.get():
@@ -371,6 +381,9 @@ class MidiDeckApp:
         try:
             while True:
                 kind, msg = self.events.get_nowait()
+                if kind == "midi":
+                    self.handle_midi_message(msg)
+                    continue
                 self.log.configure(state="normal")
                 self.log.insert("end", time.strftime("%H:%M:%S ") + msg + "\n")
                 self.log.see("end")
