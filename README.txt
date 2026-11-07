@@ -1,9 +1,11 @@
-# CRAY LDR MIDI DECK v0.2
+# CRAY LDR MIDI DECK v0.3
 
 Aplicación Windows para convertir un Alesis V Mini en una superficie de control tipo Stream Deck para FL Studio, Cubase, OBS y Windows.
 
 ## Estado de esta versión
 - Entrada MIDI seleccionable y monitor en directo.
+- Cuatro pads Alesis V Mini confirmados: notas 36, 38, 42 y 46 en canal 1.
+- Nombre personalizado para cada botón; el nombre aparece en el panel y se guarda por perfil.
 - Pads configurables por perfil: atajo, abrir programa/archivo/carpeta, URL, texto o macro.
 - Knobs CC14, CC15, CC16 y CC17 detectados y configurables por separado.
 - Remapeo de CC de entrada a CC de salida, canal, rango mínimo/máximo y puerto MIDI de salida.
@@ -26,7 +28,7 @@ La aplicación no asigna directamente parámetros internos de plugins VST: esa v
 En Configurar knobs puedes modificar para cada control el CC y canal de entrada, CC y canal de salida, y valor mínimo/máximo. El valor de entrada 0–127 se escala al rango de salida elegido. La casilla Enviar CC14–17 debe estar activada y el puerto de salida abierto para reenviar datos.
 
 ## Pads
-Las notas 36, 38, 42 y 46 son las observadas en las pruebas iniciales. Verifica cada pad físicamente en el monitor antes de asignarle una acción definitiva.
+Mapeo físico confirmado en pruebas aisladas: Pad 1 = nota 36, Pad 2 = nota 38, Pad 3 = nota 42 y Pad 4 = nota 46, todos en canal 1. Desde el editor puedes asignar un nombre personalizado y una acción a cada botón.
 
 Tipos: none, shortcut, open, url, text y macro.
 
@@ -56,7 +58,7 @@ Ejecuta BUILD_EXE.bat. El ejecutable quedará en dist\\CRAY_LDR_MIDI_DECK.exe. T
 
 ## Limitaciones conocidas
 - La asignación de controles dentro de FL Studio/Cubase se completa desde el propio DAW usando el puerto MIDI virtual.
-- Los perfiles personalizados no se detectan automáticamente por proceso todavía.
+- La detección automática de perfiles personalizados utiliza el nombre del ejecutable configurado al crear el perfil.
 - El inicio automático con Windows puede activarse desde el panel de perfil; utiliza la clave de inicio del usuario actual.
-- No se ha validado todavía en el ordenador físico del usuario tras los últimos cambios.
+- La compilación de Windows se valida mediante GitHub Actions; las acciones asignadas deben probarse también en el ordenador físico antes de uso en sesiones.
 - No se debe considerar lista para una sesión comercial hasta completar pruebas de pads, knobs y acciones.
