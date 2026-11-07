@@ -275,9 +275,12 @@ class MidiDeckApp:
 
     def disconnect(self):
         self.running = False
+        self.last_pad_state.clear()
         if self.midi_in:
-            try: self.midi_in.close()
-            except Exception: pass
+            try:
+                self.midi_in.close()
+            except Exception as e:
+                self.logline("Aviso al cerrar MIDI: " + str(e))
             self.midi_in = None
         self.status.config(text="● DESCONECTADO", fg="#e0a33a")
         self.logline("Dispositivo desconectado.")
