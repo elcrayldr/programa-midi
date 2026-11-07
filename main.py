@@ -32,23 +32,30 @@ DEFAULT_CONFIG = {
     }
 }
 
+def deep_merge(base, incoming):
+    result = json.loads(json.dumps(base))
+    for key, value in incoming.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
 def load_config():
     APP_DIR.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_PATH.exists():
-        save_config(DEFAULT_CONFIG)
+    if not CONFIG_PATH.exists(): save_config(DEFAULT_CONFIG)
     try:
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        data = {}
-    merged = json.loads(json.dumps(DEFAULT_CONFIG))
-    for k, v in data.items():
-        if isinstance(v, dict) and isinstance(merged.get(k), dict):
-            merged[k].update(v)
-        else:
-            merged[k] = v
+        if not isinstance(data, dict): data = {}
+    except Exception: data = {}
+    merged = deep_merge(DEFAULT_CONFIG, data)
     merged.setdefault("profiles", {})
+    merged.setdefault("knobs", {})
+    merged.setdefault("mapping", {}).setdefault("pads", {})
     for p in ("GLOBAL", "FL Studio", "Cubase", "OBS", "Windows"):
         merged["profiles"].setdefault(p, {})
+    for cc, default in DEFAULT_CONFIG["knobs"].items():
+        merged["knobs"].setdefault(cc, dict(default, input_cc=int(cc), output_cc=int(cc), min_value=0, max_value=127, output_channel=1))
     return merged
 
 def save_config(cfg):
@@ -120,7 +127,7 @@ def run_action(action):
 class MidiDeckApp:
     def __init__(self, root):
         self.root = root
-        self.root.title(APP_NAME + "  |  v0.1")
+        self.root.title(APP_NAME + "  |  v0.2")
         self.root.geometry("1040x720")
         self.root.minsize(900, 640)
         self.root.configure(bg="#111214")
@@ -137,6 +144,7 @@ class MidiDeckApp:
         self.device_var = tk.StringVar(value="")
         self.output_var = tk.StringVar(value=self.cfg.get("midi_output", ""))
         self.forward_var = tk.BooleanVar(value=self.cfg.get("forward_knobs", True))
+        self.knob_values = {cc: tk.IntVar(value=0) for cc in ("14", "15", "16", "17")}
         self.action_type = tk.StringVar(value="none")
         self.action_value = tk.StringVar(value="")
         self.auto_var = tk.BooleanVar(value=self.cfg.get("auto_profile", True))
@@ -173,7 +181,7 @@ class MidiDeckApp:
         header = tk.Frame(self.root, bg="#111214")
         header.pack(fill="x", padx=20, pady=(18, 12))
         tk.Label(header, text="CRAY LDR", bg="#111214", fg="#f2c400", font=("Segoe UI", 18, "bold")).pack(side="left")
-        tk.Label(header, text="  MIDI DECK  /  0.1", bg="#111214", fg="#f1f1f1", font=("Segoe UI", 15, "bold")).pack(side="left")
+        tk.Label(header, text="  MIDI DECK  /  0.2", bg="#111214", fg="#f1f1f1", font=("Segoe UI", 15, "bold")).pack(side="left")
         self.status = tk.Label(header, text="● DESCONECTADO", bg="#111214", fg="#e0a33a", font=("Segoe UI", 9, "bold"))
         self.status.pack(side="right")
 
@@ -195,6 +203,8 @@ class MidiDeckApp:
         ttk.Button(outrow, text="Abrir salida", command=self.connect_output).pack(side="left", padx=3)
         ttk.Button(outrow, text="Cerrar", command=self.disconnect_output).pack(side="left", padx=3)
         ttk.Checkbutton(outrow, text="Enviar CC14–17", variable=self.forward_var, command=self.save_forward).pack(side="left", padx=8)
+        ttk.Button(outrow, text="Configurar knobs", command=self.open_knob_editor).pack(side="left", padx=4)
+        ttk.Button(outrow, text="Perfiles", command=self.open_profile_manager).pack(side="left", padx=4)
 
         prof = self.panel(top, "PERFIL ACTIVO")
         prof.pack(side="left", fill="x", expand=True, padx=(8, 0))
@@ -217,7 +227,9 @@ class MidiDeckApp:
             b.grid(row=i//2, column=i%2, sticky="nsew", padx=5, pady=5)
             self.pad_buttons[note] = b
         pads.columnconfigure(0, weight=1); pads.columnconfigure(1, weight=1)
-        tk.Label(left, text="Knobs candidatos: CC 14 · 15 · 16 · 17", bg="#1b1d21", fg="#c4c6ca").pack(anchor="w", padx=14, pady=5)
+        tk.Label(left, text="Knobs: CC 14 · 15 · 16 · 17 (configurables)", bg="#1b1d21", fg="#c4c6ca").pack(anchor="w", padx=14, pady=5)
+        self.knob_status = tk.Label(left, text="K1 0  |  K2 0  |  K3 0  |  K4 0", bg="#1b1d21", fg="#f2c400")
+        self.knob_status.pack(anchor="w", padx=14, pady=3)
         tk.Label(left, text="Teclas: canal 16 · notas 48–72", bg="#1b1d21", fg="#c4c6ca").pack(anchor="w", padx=14, pady=3)
         tk.Label(left, text="CC1 modulación · CC64 sustain · Pitch Bend", bg="#1b1d21", fg="#c4c6ca").pack(anchor="w", padx=14, pady=3)
         tk.Label(left, text="Los controles no asignados no ejecutan acciones.", bg="#1b1d21", fg="#e0a33a", wraplength=330).pack(anchor="w", padx=14, pady=(8, 14))
@@ -226,7 +238,7 @@ class MidiDeckApp:
         right.pack(side="left", fill="both", expand=True, padx=(8, 0))
         form = tk.Frame(right, bg="#1b1d21"); form.pack(fill="x", padx=12, pady=8)
         tk.Label(form, text="Perfil de edición", bg="#1b1d21", fg="#c4c6ca").grid(row=0,column=0,sticky="w",pady=4)
-        self.profile_combo = ttk.Combobox(form, textvariable=self.profile_var, values=["GLOBAL","FL Studio","Cubase","OBS","Windows"], state="readonly", width=24)
+        self.profile_combo = ttk.Combobox(form, textvariable=self.profile_var, values=sorted(self.cfg.get("profiles", {}).keys()), state="readonly", width=24)
         self.profile_combo.grid(row=0,column=1,sticky="ew",pady=4)
         self.profile_combo.bind("<<ComboboxSelected>>", lambda e: self.load_editor())
         tk.Label(form, text="Pad", bg="#1b1d21", fg="#c4c6ca").grid(row=1,column=0,sticky="w",pady=4)
@@ -246,6 +258,7 @@ class MidiDeckApp:
         buttons = tk.Frame(right, bg="#1b1d21"); buttons.pack(fill="x", padx=12, pady=8)
         ttk.Button(buttons, text="Guardar asignación", style="Accent.TButton", command=self.save_assignment).pack(side="left", padx=(0,6))
         ttk.Button(buttons, text="Probar acción", command=self.test_action).pack(side="left")
+        ttk.Button(buttons, text="Editor de macro", command=self.open_macro_editor).pack(side="left", padx=6)
 
         logp = self.panel(self.root, "MONITOR MIDI EN DIRECTO")
         logp.pack(fill="both", expand=False, padx=20, pady=(4,18))
@@ -253,6 +266,105 @@ class MidiDeckApp:
                            relief="flat", font=("Consolas", 9), state="disabled")
         self.log.pack(fill="both", expand=True, padx=12, pady=(0,12))
         self.load_editor()
+
+
+    def open_knob_editor(self):
+        win = tk.Toplevel(self.root)
+        win.title("Configuración de knobs MIDI")
+        win.configure(bg="#17191d")
+        tk.Label(win, text="ASIGNACIÓN DE LOS CUATRO KNOBS", bg="#17191d", fg="#f2c400",
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=14, pady=12)
+        grid = tk.Frame(win, bg="#17191d"); grid.pack(padx=14, pady=4)
+        headers = ("Control", "CC entrada", "Canal", "CC salida", "Canal salida", "Mín.", "Máx.")
+        for col, title in enumerate(headers):
+            tk.Label(grid, text=title, bg="#17191d", fg="#c4c6ca").grid(row=0, column=col, padx=4)
+        variables = {}
+        for row, cc in enumerate(("14", "15", "16", "17"), 1):
+            cfg = self.cfg["knobs"].get(cc, {})
+            vals = {"input_cc": str(cfg.get("input_cc", int(cc))), "channel": str(cfg.get("channel", 1)),
+                    "output_cc": str(cfg.get("output_cc", int(cc))), "output_channel": str(cfg.get("output_channel", 1)),
+                    "min_value": str(cfg.get("min_value", 0)), "max_value": str(cfg.get("max_value", 127))}
+            variables[cc] = {k: tk.StringVar(value=v) for k, v in vals.items()}
+            tk.Label(grid, text="KNOB " + str(row), bg="#17191d", fg="#f2c400").grid(row=row, column=0, padx=4)
+            for col, key in enumerate(vals, 1):
+                tk.Entry(grid, textvariable=variables[cc][key], width=8, bg="#25282e", fg="white",
+                         insertbackground="white", relief="flat").grid(row=row, column=col, padx=4, pady=5)
+        tk.Label(win, text="CC y valores: 0–127. Canales MIDI: 1–16.", bg="#17191d", fg="#aeb2ba").pack(anchor="w", padx=14, pady=8)
+        def save():
+            try:
+                updated = {}
+                for cc, fields in variables.items():
+                    item = {k: int(v.get()) for k, v in fields.items()}
+                    for k in ("input_cc", "output_cc", "min_value", "max_value"):
+                        if not 0 <= item[k] <= 127: raise ValueError(k + ": rango 0–127")
+                    for k in ("channel", "output_channel"):
+                        if not 1 <= item[k] <= 16: raise ValueError(k + ": rango 1–16")
+                    if item["min_value"] > item["max_value"]: raise ValueError("Mínimo superior al máximo")
+                    item["label"] = "KNOB " + cc
+                    updated[cc] = item
+                self.cfg["knobs"] = updated
+                save_config(self.cfg)
+                self.logline("Configuración de knobs guardada.")
+                win.destroy()
+            except Exception as e:
+                messagebox.showerror(APP_NAME, "Valores no válidos: " + str(e), parent=win)
+        ttk.Button(win, text="Guardar", command=save).pack(pady=12)
+
+    def open_profile_manager(self):
+        win = tk.Toplevel(self.root)
+        win.title("Gestor de perfiles")
+        win.configure(bg="#17191d")
+        listing = tk.Listbox(win, width=34, height=9, bg="#25282e", fg="white", selectbackground="#a88900", relief="flat")
+        listing.pack(padx=14, pady=12, fill="both", expand=True)
+        def refresh():
+            listing.delete(0, "end")
+            for name in sorted(self.cfg.get("profiles", {})): listing.insert("end", name)
+        name_var = tk.StringVar()
+        row = tk.Frame(win, bg="#17191d"); row.pack(fill="x", padx=14, pady=6)
+        tk.Entry(row, textvariable=name_var, bg="#25282e", fg="white", insertbackground="white", relief="flat").pack(side="left", fill="x", expand=True, padx=(0, 6), ipady=5)
+        def add():
+            name = name_var.get().strip()
+            if not name: return
+            if name in self.cfg["profiles"]:
+                messagebox.showwarning(APP_NAME, "El perfil ya existe.", parent=win); return
+            self.cfg["profiles"][name] = {}
+            save_config(self.cfg); name_var.set(""); refresh(); self.refresh_profile_choices()
+        def remove():
+            selected = listing.curselection()
+            if not selected: return
+            name = listing.get(selected[0])
+            if name in ("GLOBAL", "FL Studio", "Cubase", "OBS", "Windows"):
+                messagebox.showwarning(APP_NAME, "No se pueden borrar perfiles base.", parent=win); return
+            if messagebox.askyesno(APP_NAME, "¿Eliminar " + name + "?", parent=win):
+                del self.cfg["profiles"][name]
+                save_config(self.cfg); refresh(); self.refresh_profile_choices()
+        ttk.Button(row, text="Crear perfil", command=add).pack(side="left")
+        ttk.Button(win, text="Eliminar seleccionado", command=remove).pack(pady=10)
+        refresh()
+
+    def refresh_profile_choices(self):
+        names = sorted(self.cfg.get("profiles", {}).keys())
+        self.profile_combo["values"] = names
+        if self.profile_var.get() not in names: self.profile_var.set("GLOBAL")
+        self.load_editor()
+
+    def open_macro_editor(self):
+        win = tk.Toplevel(self.root)
+        win.title("Editor de macros")
+        win.configure(bg="#17191d")
+        tk.Label(win, text="UNA ACCIÓN POR LÍNEA", bg="#17191d", fg="#f2c400",
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=12, pady=10)
+        editor = tk.Text(win, width=72, height=16, bg="#101114", fg="#eeeeee",
+                         insertbackground="#f2c400", relief="flat")
+        editor.pack(fill="both", expand=True, padx=12, pady=6)
+        if self.action_type.get() == "macro": editor.insert("1.0", self.action_value.get())
+        tk.Label(win, text="shortcut:ctrl+s | text:Hola | open:ruta | url:https://... | wait:500",
+                 bg="#17191d", fg="#aeb2ba", wraplength=560).pack(anchor="w", padx=12, pady=6)
+        def use_macro():
+            self.action_type.set("macro")
+            self.action_value.set(editor.get("1.0", "end-1c"))
+            win.destroy()
+        ttk.Button(win, text="Usar macro", command=use_macro).pack(pady=10)
 
     def logline(self, msg):
         self.events.put(("log", msg))
@@ -365,11 +477,22 @@ class MidiDeckApp:
                         self.last_pad_state.discard(note)
             elif typ == "control_change":
                 self.logline(f"CC ch{ch} cc={msg.control} value={msg.value}")
-                if msg.control in (14, 15, 16, 17) and self.forward_var.get() and self.midi_out:
-                    try:
-                        self.midi_out.send(msg.copy())
-                    except Exception as e:
-                        self.logline("Error enviando CC: " + str(e))
+                for key, knob in self.cfg.get("knobs", {}).items():
+                    if msg.control != int(knob.get("input_cc", key)) or ch != int(knob.get("channel", 1)):
+                        continue
+                    self.knob_values[key].set(msg.value)
+                    self.knob_status.config(text="  |  ".join("K" + str(i + 1) + " " +
+                        str(self.knob_values[k].get()) for i, k in enumerate(("14", "15", "16", "17"))))
+                    if self.forward_var.get() and self.midi_out:
+                        try:
+                            low, high = int(knob.get("min_value", 0)), int(knob.get("max_value", 127))
+                            scaled = round(low + (msg.value / 127) * (high - low))
+                            outgoing = msg.copy(channel=int(knob.get("output_channel", 1)) - 1,
+                                                control=int(knob.get("output_cc", key)), value=scaled)
+                            self.midi_out.send(outgoing)
+                        except Exception as e:
+                            self.logline("Error enviando CC del knob " + key + ": " + str(e))
+                    break
             elif typ == "pitchwheel":
                 self.logline(f"PITCH ch{ch} value={msg.pitch}")
             else:
