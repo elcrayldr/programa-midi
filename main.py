@@ -20,7 +20,23 @@ DEFAULT_CONFIG = {
     "knobs": {"14": {"label": "KNOB 1", "channel": 1}, "15": {"label": "KNOB 2", "channel": 1}, "16": {"label": "KNOB 3", "channel": 1}, "17": {"label": "KNOB 4", "channel": 1}},
     "profiles": {
         "GLOBAL": {},
-        "FL Studio": {},
+        "FL Studio": {
+            "38": {
+                "label": "PRO-Q 3",
+                "type": "macro",
+                "value": "shortcut:f8\nwait:350\ntext:FabFilter Pro-Q 3\nwait:250\nshortcut:enter"
+            },
+            "42": {
+                "label": "CLA-76",
+                "type": "macro",
+                "value": "shortcut:f8\nwait:350\ntext:CLA-76\nwait:250\nshortcut:enter"
+            },
+            "46": {
+                "label": "REC + PLAY",
+                "type": "macro",
+                "value": "shortcut:r\nwait:300\nshortcut:space"
+            }
+        },
         "Cubase": {},
         "OBS": {},
         "Windows": {}
