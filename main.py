@@ -12,6 +12,9 @@ DEFAULT_CONFIG = {
     "device_hint": "Alesis V Mini",
     "auto_profile": True,
     "start_with_windows": False,
+    "midi_output": "",
+    "forward_knobs": True,
+    "knobs": {"14": {"label": "KNOB 1", "channel": 1}, "15": {"label": "KNOB 2", "channel": 1}, "16": {"label": "KNOB 3", "channel": 1}, "17": {"label": "KNOB 4", "channel": 1}},
     "profiles": {
         "GLOBAL": {},
         "FL Studio": {},
@@ -124,6 +127,7 @@ class MidiDeckApp:
         self.cfg = load_config()
         self.events = queue.Queue()
         self.midi_in = None
+        self.midi_out = None
         self.midi_thread = None
         self.running = False
         self.current_profile = "Windows"
@@ -131,12 +135,15 @@ class MidiDeckApp:
         self.selected_pad = tk.StringVar(value="36")
         self.profile_var = tk.StringVar(value="GLOBAL")
         self.device_var = tk.StringVar(value="")
+        self.output_var = tk.StringVar(value=self.cfg.get("midi_output", ""))
+        self.forward_var = tk.BooleanVar(value=self.cfg.get("forward_knobs", True))
         self.action_type = tk.StringVar(value="none")
         self.action_value = tk.StringVar(value="")
         self.auto_var = tk.BooleanVar(value=self.cfg.get("auto_profile", True))
         self._style()
         self._build()
         self.refresh_devices()
+        self.refresh_outputs()
         self.root.after(100, self.process_queue)
         self.root.after(500, self.update_profile)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -180,6 +187,14 @@ class MidiDeckApp:
         ttk.Button(row, text="Actualizar", command=self.refresh_devices).pack(side="left", padx=3)
         ttk.Button(row, text="Conectar", style="Accent.TButton", command=self.connect).pack(side="left", padx=3)
         ttk.Button(row, text="Desconectar", command=self.disconnect).pack(side="left", padx=3)
+        outrow = tk.Frame(dev, bg="#1b1d21"); outrow.pack(fill="x", padx=12, pady=(0, 10))
+        tk.Label(outrow, text="Salida MIDI:", bg="#1b1d21", fg="#c4c6ca").pack(side="left", padx=(0, 8))
+        self.output_combo = ttk.Combobox(outrow, textvariable=self.output_var, state="readonly", width=30)
+        self.output_combo.pack(side="left", padx=(0, 8))
+        ttk.Button(outrow, text="Actualizar", command=self.refresh_outputs).pack(side="left", padx=3)
+        ttk.Button(outrow, text="Abrir salida", command=self.connect_output).pack(side="left", padx=3)
+        ttk.Button(outrow, text="Cerrar", command=self.disconnect_output).pack(side="left", padx=3)
+        ttk.Checkbutton(outrow, text="Enviar CC14–17", variable=self.forward_var, command=self.save_forward).pack(side="left", padx=8)
 
         prof = self.panel(top, "PERFIL ACTIVO")
         prof.pack(side="left", fill="x", expand=True, padx=(8, 0))
@@ -257,6 +272,46 @@ class MidiDeckApp:
             self.device_var.set(names[0])
         self.logline("Entradas MIDI: " + (", ".join(names) if names else "ninguna"))
 
+    def refresh_outputs(self):
+        try:
+            import mido
+            names = mido.get_output_names()
+        except Exception as e:
+            names = []
+            self.logline("No se pudo enumerar salidas MIDI: " + str(e))
+        self.output_combo["values"] = names
+        if self.output_var.get() not in names:
+            self.output_var.set(names[0] if names else "")
+        self.logline("Salidas MIDI: " + (", ".join(names) if names else "ninguna"))
+
+    def connect_output(self):
+        self.disconnect_output()
+        name = self.output_var.get()
+        if not name:
+            messagebox.showwarning(APP_NAME, "No hay salida MIDI. Crea un puerto virtual con loopMIDI y actualiza.")
+            return
+        try:
+            import mido
+            self.midi_out = mido.open_output(name)
+            self.cfg["midi_output"] = name
+            save_config(self.cfg)
+            self.logline("Salida MIDI abierta: " + name)
+        except Exception as e:
+            messagebox.showerror(APP_NAME, "No se pudo abrir la salida MIDI:\n" + str(e))
+
+    def disconnect_output(self):
+        if self.midi_out:
+            try:
+                self.midi_out.close()
+            except Exception as e:
+                self.logline("Aviso al cerrar salida MIDI: " + str(e))
+            self.midi_out = None
+            self.logline("Salida MIDI cerrada.")
+
+    def save_forward(self):
+        self.cfg["forward_knobs"] = bool(self.forward_var.get())
+        save_config(self.cfg)
+
     def connect(self):
         if self.running:
             return
@@ -310,6 +365,11 @@ class MidiDeckApp:
                         self.last_pad_state.discard(note)
             elif typ == "control_change":
                 self.logline(f"CC ch{ch} cc={msg.control} value={msg.value}")
+                if msg.control in (14, 15, 16, 17) and self.forward_var.get() and self.midi_out:
+                    try:
+                        self.midi_out.send(msg.copy())
+                    except Exception as e:
+                        self.logline("Error enviando CC: " + str(e))
             elif typ == "pitchwheel":
                 self.logline(f"PITCH ch{ch} value={msg.pitch}")
             else:
@@ -401,6 +461,7 @@ class MidiDeckApp:
 
     def close(self):
         self.disconnect()
+        self.disconnect_output()
         self.root.destroy()
 
 def main():
