@@ -7,6 +7,7 @@ Aplicación Windows para convertir un Alesis V Mini en una superficie de control
 - Pads configurables por perfil: atajo, abrir programa/archivo/carpeta, URL, texto o macro.
 - Knobs CC14, CC15, CC16 y CC17 detectados y configurables por separado.
 - Remapeo de CC de entrada a CC de salida, canal, rango mínimo/máximo y puerto MIDI de salida.
+- MIDI Learn: captura el CC y canal del knob físico al moverlo.
 - Gestor de perfiles integrados y personalizados.
 - Editor de macros multipaso con esperas mediante wait:milisegundos.
 - Configuración persistente en %APPDATA%\\CrayLDR\\MidiDeck\\config.json.
@@ -40,7 +41,7 @@ Ejemplo de macro:
 Esperas admitidas: wait:milisegundos (0–10000 ms).
 
 ## Perfiles
-Incluye GLOBAL, FL Studio, Cubase, OBS y Windows. Puedes crear perfiles adicionales desde Perfiles. La detección automática identifica procesos conocidos; los perfiles personalizados quedan disponibles para asignación manual, pero todavía no tienen detección automática por ejecutable.
+Incluye GLOBAL, FL Studio, Cubase, OBS y Windows. Puedes crear perfiles adicionales desde Perfiles. La detección automática identifica procesos conocidos. Al crear un perfil personalizado puedes indicar el nombre del ejecutable para que se active al pasar a esa aplicación.
 
 ## Instalación
 Requisitos: Windows 10/11 de 64 bits y Python 3.12.
@@ -56,6 +57,6 @@ Ejecuta BUILD_EXE.bat. El ejecutable quedará en dist\\CRAY_LDR_MIDI_DECK.exe. T
 ## Limitaciones conocidas
 - La asignación de controles dentro de FL Studio/Cubase se completa desde el propio DAW usando el puerto MIDI virtual.
 - Los perfiles personalizados no se detectan automáticamente por proceso todavía.
-- Inicio automático con Windows aún no está implementado.
+- El inicio automático con Windows puede activarse desde el panel de perfil; utiliza la clave de inicio del usuario actual.
 - No se ha validado todavía en el ordenador físico del usuario tras los últimos cambios.
 - No se debe considerar lista para una sesión comercial hasta completar pruebas de pads, knobs y acciones.
