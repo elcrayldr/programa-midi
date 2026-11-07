@@ -29,7 +29,7 @@ DEFAULT_CONFIG = {
             "42": {
                 "label": "CLA-76",
                 "type": "macro",
-                "value": "shortcut:f8\nwait:350\ntext:CLA-76\nwait:250\nshortcut:enter"
+                "value": "shortcut:f8\nwait:900\ntext:CLA-76 Mono\nwait:700\nshortcut:enter"
             },
             "46": {
                 "label": "REC + PLAY",
@@ -68,6 +68,11 @@ def load_config():
         if not isinstance(data, dict): data = {}
     except Exception: data = {}
     merged = deep_merge(DEFAULT_CONFIG, data)
+    # Actualiza la macro antigua del PAD 3: el nombre completo evita coincidencias
+    # parciales y los tiempos dan margen al Plugin Picker para filtrar.
+    old_cla_macro = "shortcut:f8\\nwait:350\\ntext:CLA-76\\nwait:250\\nshortcut:enter"
+    if merged.get("profiles", {}).get("FL Studio", {}).get("42", {}).get("value") == old_cla_macro:
+        merged["profiles"]["FL Studio"]["42"]["value"] = "shortcut:f8\\nwait:900\\ntext:CLA-76 Mono\\nwait:700\\nshortcut:enter"
     merged.setdefault("profiles", {})
     merged.setdefault("knobs", {})
     merged.setdefault("mapping", {}).setdefault("pads", {})
