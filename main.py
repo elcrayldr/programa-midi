@@ -116,13 +116,16 @@ def run_action(action):
         import webbrowser
         webbrowser.open(value)
     elif kind == "macro":
-        # One action per line: shortcut:ctrl+s | text:hello | open:C:\path
+        # Actions: shortcut:ctrl+s | text:hello | open:path | url:https://... | wait:250
         for line in value.splitlines():
             if ":" not in line:
                 continue
             sub, val = line.split(":", 1)
-            run_action({"type": sub.strip(), "value": val.strip()})
-            time.sleep(0.12)
+            sub, val = sub.strip().lower(), val.strip()
+            if sub == "wait":
+                time.sleep(max(0, min(10000, int(val))) / 1000)
+            elif sub in ("shortcut", "text", "open", "url"):
+                run_action({"type": sub, "value": val})
 
 class MidiDeckApp:
     def __init__(self, root):
