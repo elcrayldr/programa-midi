@@ -152,6 +152,7 @@ class MidiDeckApp:
         self.action_type = tk.StringVar(value="none")
         self.action_value = tk.StringVar(value="")
         self.auto_var = tk.BooleanVar(value=self.cfg.get("auto_profile", True))
+        self.startup_var = tk.BooleanVar(value=self.cfg.get("start_with_windows", False))
         self._style()
         self._build()
         self.refresh_devices()
@@ -216,6 +217,7 @@ class MidiDeckApp:
         self.profile_label = tk.Label(pr, text="Windows", bg="#1b1d21", fg="#ffffff", font=("Segoe UI", 14, "bold"))
         self.profile_label.pack(side="left", padx=(0, 12))
         ttk.Checkbutton(pr, text="Detección automática", variable=self.auto_var, command=self.save_auto).pack(side="left")
+        ttk.Checkbutton(pr, text="Iniciar con Windows", variable=self.startup_var, command=self.save_startup).pack(side="left", padx=10)
 
         body = tk.Frame(self.root, bg="#111214")
         body.pack(fill="both", expand=True, padx=20, pady=10)
@@ -575,6 +577,32 @@ class MidiDeckApp:
             self.logline("Prueba de acción ejecutada.")
         except Exception as e:
             messagebox.showerror(APP_NAME, str(e))
+
+    def save_startup(self):
+        enabled = bool(self.startup_var.get())
+        if os.name != "nt":
+            messagebox.showwarning(APP_NAME, "El inicio automático solo está disponible en Windows.")
+            self.startup_var.set(False)
+            return
+        try:
+            import winreg
+            key_path = r"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+                if enabled:
+                    if getattr(sys, "frozen", False):
+                        command = '"' + sys.executable + '"'
+                    else:
+                        command = '"' + sys.executable + '" "' + str(Path(__file__).resolve()) + '"'
+                    winreg.SetValueEx(key, "CrayLDRMidiDeck", 0, winreg.REG_SZ, command)
+                else:
+                    try: winreg.DeleteValue(key, "CrayLDRMidiDeck")
+                    except FileNotFoundError: pass
+            self.cfg["start_with_windows"] = enabled
+            save_config(self.cfg)
+            self.logline("Inicio con Windows " + ("activado." if enabled else "desactivado."))
+        except Exception as e:
+            self.startup_var.set(False)
+            messagebox.showerror(APP_NAME, "No se pudo cambiar el inicio automático:\\n" + str(e))
 
     def save_auto(self):
         self.cfg["auto_profile"] = bool(self.auto_var.get())
