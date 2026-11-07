@@ -14,6 +14,7 @@ DEFAULT_CONFIG = {
     "start_with_windows": False,
     "midi_output": "",
     "forward_knobs": True,
+    "profile_processes": {},
     "knobs": {"14": {"label": "KNOB 1", "channel": 1}, "15": {"label": "KNOB 2", "channel": 1}, "16": {"label": "KNOB 3", "channel": 1}, "17": {"label": "KNOB 4", "channel": 1}},
     "profiles": {
         "GLOBAL": {},
@@ -323,15 +324,23 @@ class MidiDeckApp:
             listing.delete(0, "end")
             for name in sorted(self.cfg.get("profiles", {})): listing.insert("end", name)
         name_var = tk.StringVar()
+        exe_var = tk.StringVar()
         row = tk.Frame(win, bg="#17191d"); row.pack(fill="x", padx=14, pady=6)
         tk.Entry(row, textvariable=name_var, bg="#25282e", fg="white", insertbackground="white", relief="flat").pack(side="left", fill="x", expand=True, padx=(0, 6), ipady=5)
+        exe_row = tk.Frame(win, bg="#17191d"); exe_row.pack(fill="x", padx=14, pady=4)
+        tk.Label(exe_row, text="Proceso .exe (opcional):", bg="#17191d", fg="#c4c6ca").pack(side="left", padx=(0, 6))
+        tk.Entry(exe_row, textvariable=exe_var, bg="#25282e", fg="white", insertbackground="white", relief="flat").pack(side="left", fill="x", expand=True, ipady=5)
         def add():
             name = name_var.get().strip()
             if not name: return
             if name in self.cfg["profiles"]:
                 messagebox.showwarning(APP_NAME, "El perfil ya existe.", parent=win); return
             self.cfg["profiles"][name] = {}
-            save_config(self.cfg); name_var.set(""); refresh(); self.refresh_profile_choices()
+            executable = exe_var.get().strip().lower()
+            if executable:
+                if not executable.endswith(".exe"): executable += ".exe"
+                self.cfg.setdefault("profile_processes", {})[name] = executable
+            save_config(self.cfg); name_var.set(""); exe_var.set(""); refresh(); self.refresh_profile_choices()
         def remove():
             selected = listing.curselection()
             if not selected: return
@@ -340,6 +349,7 @@ class MidiDeckApp:
                 messagebox.showwarning(APP_NAME, "No se pueden borrar perfiles base.", parent=win); return
             if messagebox.askyesno(APP_NAME, "¿Eliminar " + name + "?", parent=win):
                 del self.cfg["profiles"][name]
+                self.cfg.get("profile_processes", {}).pop(name, None)
                 save_config(self.cfg); refresh(); self.refresh_profile_choices()
         ttk.Button(row, text="Crear perfil", command=add).pack(side="left")
         ttk.Button(win, text="Eliminar seleccionado", command=remove).pack(pady=10)
@@ -523,6 +533,10 @@ class MidiDeckApp:
         if self.auto_var.get():
             proc = foreground_process()
             p = detect_profile(proc)
+            for custom_name, executable in self.cfg.get("profile_processes", {}).items():
+                if executable and executable.lower() == proc.lower():
+                    p = custom_name
+                    break
             if p != self.current_profile:
                 self.current_profile = p
                 self.profile_label.config(text=p)
