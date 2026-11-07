@@ -1,48 +1,48 @@
 {
   "project": "CRAY LDR MIDI DECK",
-  "version": "0.1.0-draft",
+  "version": "0.2.0",
   "device": "Alesis V Mini",
   "platform": "Windows 10 x64",
   "source_file": "midi.txt",
-  "status": "draft_from_mixed_capture",
+  "status": "validated_from_isolated_physical_control_tests",
   "midi_channel_numbering": "MIDI channels are shown as 1-based in labels; status bytes are raw hexadecimal.",
   "controls": {
     "pads": [
       {
-        "label": "Pad 1 (provisional)",
+        "label": "Pad 1",
         "status": "0x90",
         "channel": 1,
         "message": "Note On/Off",
         "note_decimal": 36,
         "note_hex": "0x24",
-        "confidence": "high"
+        "confidence": "confirmed_by_physical_test"
       },
       {
-        "label": "Pad 2 (provisional)",
+        "label": "Pad 2",
         "status": "0x90",
         "channel": 1,
         "message": "Note On/Off",
         "note_decimal": 38,
         "note_hex": "0x26",
-        "confidence": "high"
+        "confidence": "confirmed_by_physical_test"
       },
       {
-        "label": "Pad 3 (provisional)",
+        "label": "Pad 3",
         "status": "0x90",
         "channel": 1,
         "message": "Note On/Off",
         "note_decimal": 42,
         "note_hex": "0x2A",
-        "confidence": "high"
+        "confidence": "confirmed_by_physical_test"
       },
       {
-        "label": "Pad 4 (provisional)",
+        "label": "Pad 4",
         "status": "0x90",
         "channel": 1,
         "message": "Note On/Off",
         "note_decimal": 46,
         "note_hex": "0x2E",
-        "confidence": "high"
+        "confidence": "confirmed_by_physical_test"
       }
     ],
     "keyboard": {
@@ -108,40 +108,40 @@
     },
     "knobs_candidates": [
       {
-        "label": "Knob candidate 1",
+        "label": "Knob 1",
         "status": "0xB0",
         "channel": 1,
         "message": "Control Change",
         "cc_decimal": 14,
         "cc_hex": "0x0E",
-        "confidence": "medium"
+        "confidence": "confirmed_by_physical_test"
       },
       {
-        "label": "Knob candidate 2",
+        "label": "Knob 2",
         "status": "0xB0",
         "channel": 1,
         "message": "Control Change",
         "cc_decimal": 15,
         "cc_hex": "0x0F",
-        "confidence": "medium"
+        "confidence": "confirmed_by_physical_test"
       },
       {
-        "label": "Knob candidate 3",
+        "label": "Knob 3",
         "status": "0xB0",
         "channel": 1,
         "message": "Control Change",
         "cc_decimal": 16,
         "cc_hex": "0x10",
-        "confidence": "medium"
+        "confidence": "confirmed_by_physical_test"
       },
       {
-        "label": "Knob candidate 4",
+        "label": "Knob 4",
         "status": "0xB0",
         "channel": 1,
         "message": "Control Change",
         "cc_decimal": 17,
         "cc_hex": "0x11",
-        "confidence": "medium"
+        "confidence": "confirmed_by_physical_test"
       }
     ],
     "other_observed": [
@@ -181,11 +181,11 @@
     "Debounce or edge-detect pad presses so one physical press triggers one macro.",
     "Do not trigger macros from keyboard notes unless explicitly assigned.",
     "Use active-application profiles, but retain a global emergency stop/disable shortcut.",
-    "Do not infer physical knob labels from this mixed capture; confirm each knob independently before shipping defaults."
+    "Confirmed Alesis V Mini pads: notes 36, 38, 42 and 46 on MIDI channel 1.",
+    "Confirmed Alesis V Mini knobs: CC14, CC15, CC16 and CC17 on MIDI channel 1."
   ],
   "known_limitations": [
-    "The capture is a combined session, not one isolated recording per physical control.",
-    "The file proves the presence of the listed messages but does not reliably label which physical control generated each CC.",
-    "No timing information is included, so gesture timing and duplicate-event behavior cannot be evaluated."
+    "The physical pad and knob assignments listed above have been confirmed by isolated tests.",
+    "Keyboard channel 16 and its physical key-to-note orientation have not yet been fully validated."
   ]
 }
