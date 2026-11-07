@@ -1,0 +1,191 @@
+{
+  "project": "CRAY LDR MIDI DECK",
+  "version": "0.1.0-draft",
+  "device": "Alesis V Mini",
+  "platform": "Windows 10 x64",
+  "source_file": "midi.txt",
+  "status": "draft_from_mixed_capture",
+  "midi_channel_numbering": "MIDI channels are shown as 1-based in labels; status bytes are raw hexadecimal.",
+  "controls": {
+    "pads": [
+      {
+        "label": "Pad 1 (provisional)",
+        "status": "0x90",
+        "channel": 1,
+        "message": "Note On/Off",
+        "note_decimal": 36,
+        "note_hex": "0x24",
+        "confidence": "high"
+      },
+      {
+        "label": "Pad 2 (provisional)",
+        "status": "0x90",
+        "channel": 1,
+        "message": "Note On/Off",
+        "note_decimal": 38,
+        "note_hex": "0x26",
+        "confidence": "high"
+      },
+      {
+        "label": "Pad 3 (provisional)",
+        "status": "0x90",
+        "channel": 1,
+        "message": "Note On/Off",
+        "note_decimal": 42,
+        "note_hex": "0x2A",
+        "confidence": "high"
+      },
+      {
+        "label": "Pad 4 (provisional)",
+        "status": "0x90",
+        "channel": 1,
+        "message": "Note On/Off",
+        "note_decimal": 46,
+        "note_hex": "0x2E",
+        "confidence": "high"
+      }
+    ],
+    "keyboard": {
+      "status_on": "0x9F",
+      "status_off": "0x8F",
+      "channel": 16,
+      "note_numbers_decimal": [
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72
+      ],
+      "note_numbers_hex": [
+        "0x30",
+        "0x31",
+        "0x32",
+        "0x33",
+        "0x34",
+        "0x35",
+        "0x36",
+        "0x37",
+        "0x38",
+        "0x39",
+        "0x3A",
+        "0x3B",
+        "0x3C",
+        "0x3D",
+        "0x3E",
+        "0x3F",
+        "0x40",
+        "0x41",
+        "0x42",
+        "0x43",
+        "0x44",
+        "0x45",
+        "0x46",
+        "0x47",
+        "0x48"
+      ],
+      "confidence": "high_for_observed_messages",
+      "note": "The export contains 25 distinct note numbers on channel 16. Exact physical key-to-note orientation should be confirmed with a short isolated capture."
+    },
+    "knobs_candidates": [
+      {
+        "label": "Knob candidate 1",
+        "status": "0xB0",
+        "channel": 1,
+        "message": "Control Change",
+        "cc_decimal": 14,
+        "cc_hex": "0x0E",
+        "confidence": "medium"
+      },
+      {
+        "label": "Knob candidate 2",
+        "status": "0xB0",
+        "channel": 1,
+        "message": "Control Change",
+        "cc_decimal": 15,
+        "cc_hex": "0x0F",
+        "confidence": "medium"
+      },
+      {
+        "label": "Knob candidate 3",
+        "status": "0xB0",
+        "channel": 1,
+        "message": "Control Change",
+        "cc_decimal": 16,
+        "cc_hex": "0x10",
+        "confidence": "medium"
+      },
+      {
+        "label": "Knob candidate 4",
+        "status": "0xB0",
+        "channel": 1,
+        "message": "Control Change",
+        "cc_decimal": 17,
+        "cc_hex": "0x11",
+        "confidence": "medium"
+      }
+    ],
+    "other_observed": [
+      {
+        "label": "Modulation wheel candidate",
+        "status": "0xB0",
+        "channel": 1,
+        "message": "Control Change",
+        "cc_decimal": 1,
+        "cc_hex": "0x01",
+        "confidence": "medium"
+      },
+      {
+        "label": "Sustain pedal/control candidate",
+        "status": "0xB0",
+        "channel": 1,
+        "message": "Control Change",
+        "cc_decimal": 64,
+        "cc_hex": "0x40",
+        "values_observed": [
+          0,
+          127
+        ],
+        "confidence": "high_for_message_only"
+      },
+      {
+        "label": "Pitch bend",
+        "status": "0xE0",
+        "channel": 1,
+        "message": "Pitch Bend",
+        "confidence": "high"
+      }
+    ]
+  },
+  "implementation_rules": [
+    "Treat Note On with velocity 0 as note release as well as explicit Note Off.",
+    "Debounce or edge-detect pad presses so one physical press triggers one macro.",
+    "Do not trigger macros from keyboard notes unless explicitly assigned.",
+    "Use active-application profiles, but retain a global emergency stop/disable shortcut.",
+    "Do not infer physical knob labels from this mixed capture; confirm each knob independently before shipping defaults."
+  ],
+  "known_limitations": [
+    "The capture is a combined session, not one isolated recording per physical control.",
+    "The file proves the presence of the listed messages but does not reliably label which physical control generated each CC.",
+    "No timing information is included, so gesture timing and duplicate-event behavior cannot be evaluated."
+  ]
+}
