@@ -14,6 +14,8 @@ DEFAULT_CONFIG = {
     "start_with_windows": False,
     "midi_output": "",
     "forward_knobs": True,
+    "mixer_nav_enabled": True,
+    "mixer_nav_step": 2,
     "profile_processes": {},
     "knobs": {"14": {"label": "KNOB 1", "channel": 1}, "15": {"label": "KNOB 2", "channel": 1}, "16": {"label": "KNOB 3", "channel": 1}, "17": {"label": "KNOB 4", "channel": 1}},
     "profiles": {
@@ -148,6 +150,9 @@ class MidiDeckApp:
         self.device_var = tk.StringVar(value="")
         self.output_var = tk.StringVar(value=self.cfg.get("midi_output", ""))
         self.forward_var = tk.BooleanVar(value=self.cfg.get("forward_knobs", True))
+        self.mixer_nav_var = tk.BooleanVar(value=self.cfg.get("mixer_nav_enabled", True))
+        self.last_knob_values = {}
+        self.knob_nav_accumulator = 0
         self.knob_values = {cc: tk.IntVar(value=0) for cc in ("14", "15", "16", "17")}
         self.knob_learn_target = None
         self.knob_learn_vars = {}
@@ -211,6 +216,7 @@ class MidiDeckApp:
         ttk.Button(outrow, text="Abrir salida", command=self.connect_output).pack(side="left", padx=3)
         ttk.Button(outrow, text="Cerrar", command=self.disconnect_output).pack(side="left", padx=3)
         ttk.Checkbutton(outrow, text="Enviar CC14–17", variable=self.forward_var, command=self.save_forward).pack(side="left", padx=8)
+        ttk.Checkbutton(outrow, text="K1 Mixer FL", variable=self.mixer_nav_var, command=self.save_mixer_nav).pack(side="left", padx=6)
         ttk.Button(outrow, text="Configurar knobs", command=self.open_knob_editor).pack(side="left", padx=4)
         ttk.Button(outrow, text="Perfiles", command=self.open_profile_manager).pack(side="left", padx=4)
 
@@ -454,6 +460,41 @@ class MidiDeckApp:
         self.cfg["forward_knobs"] = bool(self.forward_var.get())
         save_config(self.cfg)
 
+    def save_mixer_nav(self):
+        self.cfg["mixer_nav_enabled"] = bool(self.mixer_nav_var.get())
+        self.last_knob_values.pop("14", None)
+        self.knob_nav_accumulator = 0
+        save_config(self.cfg)
+        self.logline("Navegación K1 Mixer FL " + ("activada." if self.mixer_nav_var.get() else "desactivada."))
+
+    def handle_mixer_navigation(self, knob_key, value):
+        # El V Mini envía CC absolutos. Convertimos el desplazamiento acumulado
+        # del primer knob en pasos de flecha, solo mientras FL Studio está activo.
+        previous = self.last_knob_values.get(knob_key)
+        self.last_knob_values[knob_key] = int(value)
+        if knob_key != "14" or not self.mixer_nav_var.get() or previous is None:
+            return
+        delta = int(value) - int(previous)
+        if abs(delta) > 32:  # salto de inicialización/desconexión: resincronizar
+            self.knob_nav_accumulator = 0
+            return
+        if not delta:
+            return
+        if detect_profile(foreground_process()) != "FL Studio":
+            self.knob_nav_accumulator = 0
+            return
+        self.knob_nav_accumulator += delta
+        threshold = max(1, min(16, int(self.cfg.get("mixer_nav_step", 2))))
+        steps = int(self.knob_nav_accumulator / threshold)
+        if steps:
+            try:
+                import pyautogui
+                pyautogui.press("right" if steps > 0 else "left", presses=abs(steps), interval=0.02)
+                self.knob_nav_accumulator -= steps * threshold
+            except Exception as e:
+                self.logline("Error navegación Mixer FL: " + str(e))
+                self.knob_nav_accumulator = 0
+
     def connect(self):
         if self.running:
             return
@@ -522,9 +563,10 @@ class MidiDeckApp:
                     if msg.control != int(knob.get("input_cc", key)) or ch != int(knob.get("channel", 1)):
                         continue
                     self.knob_values[key].set(msg.value)
+                    self.handle_mixer_navigation(key, msg.value)
                     self.knob_status.config(text="  |  ".join("K" + str(i + 1) + " " +
                         str(self.knob_values[k].get()) for i, k in enumerate(("14", "15", "16", "17"))))
-                    if self.forward_var.get() and self.midi_out:
+                    if self.forward_var.get() and self.midi_out and not (key == "14" and self.mixer_nav_var.get()):
                         try:
                             low, high = int(knob.get("min_value", 0)), int(knob.get("max_value", 127))
                             scaled = round(low + (msg.value / 127) * (high - low))
