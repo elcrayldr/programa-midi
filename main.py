@@ -149,6 +149,8 @@ class MidiDeckApp:
         self.output_var = tk.StringVar(value=self.cfg.get("midi_output", ""))
         self.forward_var = tk.BooleanVar(value=self.cfg.get("forward_knobs", True))
         self.knob_values = {cc: tk.IntVar(value=0) for cc in ("14", "15", "16", "17")}
+        self.knob_learn_target = None
+        self.knob_learn_vars = {}
         self.action_type = tk.StringVar(value="none")
         self.action_value = tk.StringVar(value="")
         self.auto_var = tk.BooleanVar(value=self.cfg.get("auto_profile", True))
@@ -295,7 +297,10 @@ class MidiDeckApp:
             for col, key in enumerate(vals, 1):
                 tk.Entry(grid, textvariable=variables[cc][key], width=8, bg="#25282e", fg="white",
                          insertbackground="white", relief="flat").grid(row=row, column=col, padx=4, pady=5)
-        tk.Label(win, text="CC y valores: 0–127. Canales MIDI: 1–16.", bg="#17191d", fg="#aeb2ba").pack(anchor="w", padx=14, pady=8)
+            ttk.Button(grid, text="MIDI Learn", command=lambda target=cc: self.start_knob_learn(target)).grid(row=row, column=7, padx=5)
+        self.knob_learn_vars = variables
+        tk.Label(win, text="CC y valores: 0–127. Canales MIDI: 1–16. MIDI Learn: mueve el knob que quieras capturar.",
+                 bg="#17191d", fg="#aeb2ba").pack(anchor="w", padx=14, pady=8)
         def save():
             try:
                 updated = {}
@@ -315,6 +320,11 @@ class MidiDeckApp:
             except Exception as e:
                 messagebox.showerror(APP_NAME, "Valores no válidos: " + str(e), parent=win)
         ttk.Button(win, text="Guardar", command=save).pack(pady=12)
+
+    def start_knob_learn(self, knob_key):
+        self.knob_learn_target = knob_key
+        self.logline("MIDI Learn activo para KNOB " + str(int(knob_key) - 13) + ". Mueve el control físico.")
+        messagebox.showinfo(APP_NAME, "Mueve ahora el knob físico que quieres asignar. Se capturará su CC y canal.")
 
     def open_profile_manager(self):
         win = tk.Toplevel(self.root)
@@ -492,6 +502,17 @@ class MidiDeckApp:
                         self.last_pad_state.discard(note)
             elif typ == "control_change":
                 self.logline(f"CC ch{ch} cc={msg.control} value={msg.value}")
+                if self.knob_learn_target:
+                    target = self.knob_learn_target
+                    self.knob_learn_target = None
+                    self.cfg.setdefault("knobs", {}).setdefault(target, {})["input_cc"] = int(msg.control)
+                    self.cfg["knobs"][target]["channel"] = int(ch)
+                    if target in self.knob_learn_vars:
+                        self.knob_learn_vars[target]["input_cc"].set(str(msg.control))
+                        self.knob_learn_vars[target]["channel"].set(str(ch))
+                    save_config(self.cfg)
+                    self.logline("MIDI Learn: KNOB " + str(int(target) - 13) +
+                                  " = CC" + str(msg.control) + " canal " + str(ch))
                 for key, knob in self.cfg.get("knobs", {}).items():
                     if msg.control != int(knob.get("input_cc", key)) or ch != int(knob.get("channel", 1)):
                         continue
