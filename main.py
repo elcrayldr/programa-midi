@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
     "midi_output": "",
     "forward_knobs": True,
     "mixer_nav_enabled": True,
-    "mixer_nav_step": 2,
+    "mixer_nav_step": 10,
     "profile_processes": {},
     "knobs": {"14": {"label": "KNOB 1", "channel": 1}, "15": {"label": "KNOB 2", "channel": 1}, "16": {"label": "KNOB 3", "channel": 1}, "17": {"label": "KNOB 4", "channel": 1}},
     "profiles": {
@@ -468,29 +468,39 @@ class MidiDeckApp:
         self.logline("Navegación K1 Mixer FL " + ("activada." if self.mixer_nav_var.get() else "desactivada."))
 
     def handle_mixer_navigation(self, knob_key, value):
-        # El V Mini envía CC absolutos. Convertimos el desplazamiento acumulado
-        # del primer knob en pasos de flecha, solo mientras FL Studio está activo.
+        # Convierte el recorrido del potenciómetro CC14 en pasos discretos.
+        # Umbral alto + histéresis para evitar que pequeñas variaciones recorran
+        # varios Inserts. Nunca procesa saltos de sincronización al conectar.
         previous = self.last_knob_values.get(knob_key)
         self.last_knob_values[knob_key] = int(value)
         if knob_key != "14" or not self.mixer_nav_var.get() or previous is None:
             return
+
         delta = int(value) - int(previous)
-        if abs(delta) > 32:  # salto de inicialización/desconexión: resincronizar
+        if abs(delta) > 24:
             self.knob_nav_accumulator = 0
             return
-        if not delta:
+        if delta == 0:
             return
         if detect_profile(foreground_process()) != "FL Studio":
             self.knob_nav_accumulator = 0
             return
+
+        # Al invertir el giro, descarta el residuo anterior para que no
+        # provoque un paso inesperado en la dirección contraria.
+        direction = 1 if delta > 0 else -1
+        previous_direction = getattr(self, "_knob_nav_direction", 0)
+        if previous_direction and direction != previous_direction:
+            self.knob_nav_accumulator = 0
+        self._knob_nav_direction = direction
         self.knob_nav_accumulator += delta
-        threshold = max(1, min(16, int(self.cfg.get("mixer_nav_step", 2))))
-        steps = int(self.knob_nav_accumulator / threshold)
-        if steps:
+
+        threshold = max(8, min(24, int(self.cfg.get("mixer_nav_step", 10))))
+        if abs(self.knob_nav_accumulator) >= threshold:
             try:
                 import pyautogui
-                pyautogui.press("right" if steps > 0 else "left", presses=abs(steps), interval=0.02)
-                self.knob_nav_accumulator -= steps * threshold
+                pyautogui.press("right" if self.knob_nav_accumulator > 0 else "left")
+                self.knob_nav_accumulator -= direction * threshold
             except Exception as e:
                 self.logline("Error navegación Mixer FL: " + str(e))
                 self.knob_nav_accumulator = 0
